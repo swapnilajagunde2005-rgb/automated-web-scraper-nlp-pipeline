@@ -20,4 +20,4 @@ An end-to-end data engineering and artificial intelligence application that auto
 
 1. Clone the repository to your machine:
 ```bash
-git clone [https://github.com/YOUR_USERNAME/automated-web-scraper-nlp-pipeline.git](https://github.com/YOUR_USERNAME/automated-web-scraper-nlp-pipeline.git)
+git clone [https://github.com/swapnilajagunde2005-rgb/automated-web-scraper-nlp-pipeline.git](https://github.com/swapnilajagunde2005-rgb/automated-web-scraper-nlp-pipeline.git)
