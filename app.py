@@ -1,80 +1,105 @@
+import re
+from collections import Counter
 import streamlit as st
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import nltk
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import os
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.sentiment import SentimentIntensityAnalyzer
 
-# Page configuration
-st.set_page_config(page_title="AI Sentiment Pipeline", layout="wide")
-nltk.download('vader_lexicon', quiet=True)
+# Automatically download NLTK datasets on launch
+@st.cache_resource
+def setup_nltk():
+    nltk.download('punkt')
+    nltk.download('stopwords')
+    nltk.download('vader_lexicon')
 
-# --- BACKEND LOGIC (From your script) ---
-def scrape_and_analyze(url):
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, "html.parser")
-        elements = soup.find_all("div", class_="quote")
-        
-        records = []
-        sia = SentimentIntensityAnalyzer()
-        
-        for item in elements:
-            text = item.find("span", class_="text").text.strip() if item.find("span", class_="text") else ""
-            author = item.find("small", class_="author").text.strip() if item.find("small", class_="author") else "Anonymous"
-            if text:
-                scores = sia.polarity_scores(text)
-                compound = scores['compound']
-                sentiment = 'Positive' if compound >= 0.05 else ('Negative' if compound <= -0.05 else 'Neutral')
-                records.append({"User": author, "Review": text, "Compound": compound, "Sentiment": sentiment})
-        
-        return pd.DataFrame(records)
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        return pd.DataFrame()
+setup_nltk()
 
-# --- FRONTEND DASHBOARD LAYOUT ---
-st.title("📊 Real-Time Automated Review Sentiment Analyzer")
-st.markdown("This intelligent pipeline extracts raw website HTML data and passes it through a VADER NLP model to instantly evaluate consumer emotional trends.")
-st.write("---")
+# --- Page Layout & Config ---
+st.set_page_config(page_title="Web Scraper & NLP Pipeline", layout="wide")
+st.title("🌐 Automated Web Scraper & NLP Pipeline")
+st.write("Extract content from any public webpage and run real-time Natural Language Processing.")
 
-# Sidebar
-st.sidebar.header("Pipeline Configurations")
-target_url = st.sidebar.text_input("Target Web URL", value="https://quotes.toscrape.com/")
-run_pipeline = st.sidebar.button("🚀 Run Automated NLP Pipeline")
+# --- Interactive Input ---
+target_url = st.text_input("Enter Webpage URL:", value="https://en.wikipedia.org/wiki/Natural_language_processing")
 
-if run_pipeline:
-    with st.spinner("Connecting to target server, extracting DOM, and processing NLP matrices..."):
-        df = scrape_and_analyze(target_url)
-        
-    if not df.empty:
-        # KPI Metric Cards
-        total_reviews = len(df)
-        pos_pct = (df['Sentiment'] == 'Positive').sum() / total_reviews * 100
-        neg_pct = (df['Sentiment'] == 'Negative').sum() / total_reviews * 100
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Reviews Extracted", f"{total_reviews} rows")
-        col2.metric("Positive Sentiment", f"{pos_pct:.1f}%", delta=f"{pos_pct:.1f}%")
-        col3.metric("Negative Sentiment", f"{neg_pct:.1f}%", delta=f"-{neg_pct:.1f}%", delta_color="inverse")
-        
-        st.write("### 📦 Processed Dataset Matrix")
-        st.dataframe(df, use_container_width=True)
-        
-        # Visualizations
-        st.write("### 📈 Statistical Distribution Breakdown")
-        chart_data = df['Sentiment'].value_counts()
-        st.bar_chart(chart_data)
-        
-        # Download Button
-        csv_data = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Cleaned CSV Dataset",
-            data=csv_data,
-            file_name="sentiment_report.csv",
-            mime="text/csv"
-        )
+if st.button("Scrape & Analyze", type="primary"):
+    if not target_url.strip():
+        st.warning("Please enter a valid URL.")
     else:
-        st.warning("No structural records found. Please verify target HTML tags.")
+        with st.spinner("Scraping webpage and analyzing text..."):
+            try:
+                # 1. Web Scraping
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+                }
+                response = requests.get(target_url, headers=headers, timeout=10)
+                response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                paragraphs = soup.find_all("p")
+                raw_text = " ".join([p.get_text() for p in paragraphs])
+
+                if not raw_text.strip():
+                    st.error("No readable paragraph text could be extracted from this webpage.")
+                    st.stop()
+
+                # 2. NLP Processing
+                clean_text = re.sub(r'[^a-zA-Z\s]', '', raw_text).lower()
+                tokens = word_tokenize(clean_text)
+                
+                stop_words = set(stopwords.words("english"))
+                filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2]
+                
+                # Word Frequency & Sentiment Analysis
+                word_counts = Counter(filtered_tokens).most_common(10)
+                sia = SentimentIntensityAnalyzer()
+                sentiment = sia.polarity_scores(raw_text)
+
+                # 3. Streamlit Display Output
+                st.success("Analysis complete!")
+                st.divider()
+
+                # Metric Cards
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Paragraphs Found", len(paragraphs))
+                col2.metric("Total Words", len(tokens))
+                col3.metric("Filtered Keywords", len(set(filtered_tokens)))
+
+                compound = sentiment['compound']
+                if compound >= 0.05:
+                    sent_label = "Positive 😃"
+                elif compound <= -0.05:
+                    sent_label = "Negative 🙁"
+                else:
+                    sent_label = "Neutral 😐"
+                col4.metric("Overall Sentiment", sent_label)
+
+                # Data Sections
+                res_col1, res_col2 = st.columns(2)
+
+                with res_col1:
+                    st.subheader("📊 Top 10 Keywords")
+                    st.dataframe(
+                        {"Keyword": [w for w, _ in word_counts], "Frequency": [c for _, c in word_counts]},
+                        use_container_width=True
+                    )
+
+                with res_col2:
+                    st.subheader("🎭 Sentiment Distribution")
+                    st.json({
+                        "Positive Score": f"{sentiment['pos']:.2%}",
+                        "Neutral Score": f"{sentiment['neu']:.2%}",
+                        "Negative Score": f"{sentiment['neg']:.2%}",
+                        "Compound Intensity": sentiment['compound']
+                    })
+
+                with st.expander("📄 View Scraped Raw Text"):
+                    st.write(raw_text[:2000] + ("..." if len(raw_text) > 2000 else ""))
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Failed to fetch webpage: {e}")
+            except Exception as e:
+                st.error(f"Pipeline error: {e}")
