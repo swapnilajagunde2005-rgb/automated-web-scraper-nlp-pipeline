@@ -12,6 +12,7 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 @st.cache_resource
 def setup_nltk():
     nltk.download('punkt')
+    nltk.download('punkt_tab')
     nltk.download('stopwords')
     nltk.download('vader_lexicon')
 
