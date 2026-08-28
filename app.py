@@ -8,7 +8,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-# Automatically download NLTK datasets on launch
+# Automatically download required NLTK datasets on launch
 @st.cache_resource
 def setup_nltk():
     nltk.download('punkt')
@@ -24,19 +24,24 @@ st.title("🌐 Automated Web Scraper & NLP Pipeline")
 st.write("Extract content from any public webpage and run real-time Natural Language Processing.")
 
 # --- Interactive Input ---
-target_url = st.text_input("Enter Webpage URL:", value="https://en.wikipedia.org/wiki/Natural_language_processing")
+raw_input_url = st.text_input("Enter Webpage URL:", value="https://en.wikipedia.org/wiki/Natural_language_processing")
 
 if st.button("Scrape & Analyze", type="primary"):
-    if not target_url.strip():
+    # Sanitize and clean URL input (removes extra spaces, parentheses, quotes)
+    clean_url = raw_input_url.strip(" ()'\"")
+    if clean_url and not clean_url.startswith(("http://", "https://")):
+        clean_url = "https://" + clean_url
+
+    if not clean_url:
         st.warning("Please enter a valid URL.")
     else:
-        with st.spinner("Scraping webpage and analyzing text..."):
+        with st.spinner(f"Scraping {clean_url} and analyzing text..."):
             try:
                 # 1. Web Scraping
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
                 }
-                response = requests.get(target_url, headers=headers, timeout=10)
+                response = requests.get(clean_url, headers=headers, timeout=10)
                 response.raise_for_status()
 
                 soup = BeautifulSoup(response.text, "html.parser")
